@@ -10,6 +10,7 @@ import ManageTeachers from "./pages/ManageTeachers";
 import ManageSubjects from "./pages/ManageSubjects";
 import ManageRooms from "./pages/ManageRooms";
 import ManageBatches from "./pages/ManageBatches";
+import ManageTimeslots from "./pages/ManageTimeslots";
 import GenerateTimetable from "./pages/GenerateTimetable";
 import ViewTimetable from "./pages/ViewTimetable";
 import NotFound from "./pages/NotFound";
@@ -36,6 +37,7 @@ const App = () => (
                   <Route path="/manage/subjects" element={<ManageSubjects />} />
                   <Route path="/manage/rooms" element={<ManageRooms />} />
                   <Route path="/manage/batches" element={<ManageBatches />} />
+                  <Route path="/manage/timeslots" element={<ManageTimeslots />} />
                   <Route path="/generate" element={<GenerateTimetable />} />
                   <Route path="/view" element={<ViewTimetable />} />
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
