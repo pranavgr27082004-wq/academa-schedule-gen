@@ -64,6 +64,25 @@ export function generateOptimizedTimetable({
 }: GenerateParams): TimetableEntry[] {
   const timetableEntries: TimetableEntry[] = [];
   
+  console.log('Starting timetable generation with:', {
+    teacherCount: teachers.length,
+    subjectCount: subjects.length,
+    roomCount: rooms.length,
+    batchCount: batches.length,
+    timeslotCount: timeslots.length,
+    assignmentCount: assignments.length,
+  });
+  
+  // Sort timeslots by day and time for consistent ordering
+  const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const sortedTimeslots = [...timeslots].sort((a, b) => {
+    const dayCompare = dayOrder.indexOf(a.day) - dayOrder.indexOf(b.day);
+    if (dayCompare !== 0) return dayCompare;
+    return a.start_time.localeCompare(b.start_time);
+  });
+  
+  console.log('Sorted timeslots:', sortedTimeslots.map(t => `${t.day} ${t.start_time}-${t.end_time}`));
+  
   // Track occupied slots
   const teacherSlots = new Map<string, Set<string>>();
   const roomSlots = new Map<string, Set<string>>();
@@ -109,7 +128,7 @@ export function generateOptimizedTimetable({
       // Schedule required hours
       let hoursScheduled = 0;
       
-      for (const timeslot of timeslots) {
+      for (const timeslot of sortedTimeslots) {
         if (hoursScheduled >= subject.hours_per_week) break;
 
         // Check if this slot is available for teacher, room, and batch

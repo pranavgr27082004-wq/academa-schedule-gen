@@ -53,10 +53,15 @@ const GenerateTimetable = () => {
   const { data: timeslots } = useQuery({
     queryKey: ["timeslots"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("timeslots").select("*");
+      const { data, error } = await supabase
+        .from("timeslots")
+        .select("*")
+        .order("day", { ascending: true })
+        .order("start_time", { ascending: true });
       if (error) throw error;
       return data;
     },
+    staleTime: 0, // Always fetch fresh data
   });
 
   const { data: assignments } = useQuery({
@@ -113,9 +118,20 @@ const GenerateTimetable = () => {
     },
   });
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     setIsGenerating(true);
-    generateMutation.mutate();
+    // Refetch all data to ensure we have the latest timeslots
+    await queryClient.invalidateQueries({ queryKey: ["timeslots"] });
+    await queryClient.invalidateQueries({ queryKey: ["teachers"] });
+    await queryClient.invalidateQueries({ queryKey: ["subjects"] });
+    await queryClient.invalidateQueries({ queryKey: ["rooms"] });
+    await queryClient.invalidateQueries({ queryKey: ["batches"] });
+    await queryClient.invalidateQueries({ queryKey: ["teacher-subject-assignments"] });
+    
+    // Wait a bit for queries to refetch
+    setTimeout(() => {
+      generateMutation.mutate();
+    }, 100);
   };
 
   return (
