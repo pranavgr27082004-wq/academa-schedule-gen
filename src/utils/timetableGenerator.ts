@@ -30,6 +30,7 @@ interface Timeslot {
   day: string;
   start_time: string;
   end_time: string;
+  is_break?: boolean;
 }
 
 interface Assignment {
@@ -130,6 +131,12 @@ export function generateOptimizedTimetable({
       
       for (const timeslot of sortedTimeslots) {
         if (hoursScheduled >= subject.hours_per_week) break;
+
+        // Skip break periods - no classes should be scheduled during breaks
+        if (timeslot.is_break) {
+          console.log(`Skipping break period: ${timeslot.day} ${timeslot.start_time}-${timeslot.end_time}`);
+          continue;
+        }
 
         // Check if this slot is available for teacher, room, and batch
         const teacherAvailable = !teacherSlots.get(teacherId)?.has(timeslot.id);

@@ -149,6 +149,7 @@ export type Database = {
           day: string
           end_time: string
           id: string
+          is_break: boolean
           start_time: string
         }
         Insert: {
@@ -156,6 +157,7 @@ export type Database = {
           day: string
           end_time: string
           id?: string
+          is_break?: boolean
           start_time: string
         }
         Update: {
@@ -163,6 +165,7 @@ export type Database = {
           day?: string
           end_time?: string
           id?: string
+          is_break?: boolean
           start_time?: string
         }
         Relationships: []
