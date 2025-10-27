@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Pencil, Trash2, Clock } from "lucide-react";
@@ -19,6 +20,9 @@ const ManageTimeslots = () => {
   const [day, setDay] = useState("Monday");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [timeslotToDelete, setTimeslotToDelete] = useState<any>(null);
+  const [affectedEntriesCount, setAffectedEntriesCount] = useState(0);
 
   const queryClient = useQueryClient();
 
@@ -61,24 +65,42 @@ const ManageTimeslots = () => {
     onError: () => toast.error("Failed to update time slot"),
   });
 
+  const handleDeleteClick = async (slot: any) => {
+    // Check how many timetable entries use this timeslot
+    const { data: timetableEntries, error } = await supabase
+      .from("timetable")
+      .select("id")
+      .eq("timeslot_id", slot.id);
+
+    if (error) {
+      toast.error("Failed to check timeslot usage");
+      return;
+    }
+
+    setTimeslotToDelete(slot);
+    setAffectedEntriesCount(timetableEntries?.length || 0);
+    setDeleteDialogOpen(true);
+  };
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      // Check if timeslot is used in timetable
-      const { data: timetableEntries } = await supabase
+      // First delete all timetable entries using this timeslot (cascade delete)
+      const { error: timetableError } = await supabase
         .from("timetable")
-        .select("id")
-        .eq("timeslot_id", id)
-        .limit(1);
+        .delete()
+        .eq("timeslot_id", id);
 
-      if (timetableEntries && timetableEntries.length > 0) {
-        throw new Error("Cannot delete time slot that is used in the timetable");
-      }
+      if (timetableError) throw timetableError;
 
+      // Then delete the timeslot
       const { error } = await supabase.from("timeslots").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["timeslots"] });
+      queryClient.invalidateQueries({ queryKey: ["timetable-full"] });
+      setDeleteDialogOpen(false);
+      setTimeslotToDelete(null);
       toast.success("Time slot deleted successfully");
     },
     onError: (error: any) => {
@@ -226,7 +248,7 @@ const ManageTimeslots = () => {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => deleteMutation.mutate(slot.id)}
+                            onClick={() => handleDeleteClick(slot)}
                             className="h-8 w-8 p-0 hover:bg-destructive hover:text-destructive-foreground"
                           >
                             <Trash2 className="h-3 w-3" />
@@ -274,7 +296,7 @@ const ManageTimeslots = () => {
                         <Button
                           variant="destructive"
                           size="sm"
-                          onClick={() => deleteMutation.mutate(slot.id)}
+                          onClick={() => handleDeleteClick(slot)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -286,6 +308,38 @@ const ManageTimeslots = () => {
             </Table>
           </CardContent>
         </Card>
+
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Time Slot</AlertDialogTitle>
+              <AlertDialogDescription>
+                {affectedEntriesCount > 0 ? (
+                  <>
+                    This time slot ({timeslotToDelete?.day} {timeslotToDelete?.start_time}-{timeslotToDelete?.end_time}) is currently used in <strong>{affectedEntriesCount}</strong> timetable {affectedEntriesCount === 1 ? 'entry' : 'entries'}.
+                    <br /><br />
+                    Deleting this time slot will also remove all these timetable entries. This action cannot be undone.
+                  </>
+                ) : (
+                  <>
+                    Are you sure you want to delete this time slot ({timeslotToDelete?.day} {timeslotToDelete?.start_time}-{timeslotToDelete?.end_time})?
+                    <br /><br />
+                    This action cannot be undone.
+                  </>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => timeslotToDelete && deleteMutation.mutate(timeslotToDelete.id)}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
