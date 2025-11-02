@@ -118,12 +118,17 @@ export function generateOptimizedTimetable({
     const slots = classTimeslots.slice(startIndex, startIndex + count);
     const firstDay = slots[0].day;
     
-    // Check if all slots are on the same day and consecutive
+    // Check if all slots are on the same day
     for (let i = 0; i < slots.length; i++) {
       if (slots[i].day !== firstDay) return null;
-      if (i > 0) {
-        // Check if this slot immediately follows the previous one
-        if (slots[i].start_time !== slots[i-1].end_time) return null;
+    }
+    
+    // Verify slots are truly consecutive in time
+    for (let i = 1; i < slots.length; i++) {
+      // The previous slot's end time should match the current slot's start time
+      if (slots[i - 1].end_time !== slots[i].start_time) {
+        console.log(`Slots not consecutive: ${slots[i-1].end_time} != ${slots[i].start_time}`);
+        return null;
       }
     }
     
@@ -146,16 +151,22 @@ export function generateOptimizedTimetable({
       // Use first available teacher
       const teacherId = teacherIds[0];
 
-      // Find appropriate room
-      const appropriateRooms = rooms.filter(r => {
+      // Find appropriate room - for labs, prefer lab rooms but allow regular rooms if needed
+      let appropriateRooms = rooms.filter(r => {
         if (subject.type === 'Lab') {
           return r.type === 'Lab';
         }
         return true;
       });
 
+      // If no lab rooms available for a lab subject, use any available room
+      if (appropriateRooms.length === 0 && subject.type === 'Lab') {
+        console.warn(`No lab rooms found for ${subject.name}, will use any available room`);
+        appropriateRooms = rooms;
+      }
+
       if (appropriateRooms.length === 0) {
-        console.warn(`No appropriate room found for subject: ${subject.name} (${subject.type})`);
+        console.warn(`No rooms available for subject: ${subject.name} (${subject.type})`);
         continue;
       }
 
@@ -164,12 +175,19 @@ export function generateOptimizedTimetable({
       
       // For Lab subjects, schedule in 2-hour continuous blocks
       if (subject.type === 'Lab') {
-        for (let i = 0; i < classTimeslots.length && hoursScheduled < subject.hours_per_week; i++) {
+        const blocksNeeded = Math.ceil(subject.hours_per_week / 2);
+        let blocksScheduled = 0;
+        
+        console.log(`Attempting to schedule ${blocksNeeded} 2-hour lab blocks for ${subject.name} in ${batch.name}`);
+        
+        for (let i = 0; i < classTimeslots.length && blocksScheduled < blocksNeeded; i++) {
           const consecutiveSlots = findConsecutiveSlots(i, 2);
           
-          if (!consecutiveSlots) continue;
+          if (!consecutiveSlots) {
+            continue;
+          }
 
-          // Check if all 2 slots are available
+          // Check if all 2 slots are available for teacher, batch, and find available room
           let selectedRoom = null;
           for (const room of appropriateRooms) {
             const allSlotsAvailable = consecutiveSlots.every(slot => 
@@ -182,7 +200,9 @@ export function generateOptimizedTimetable({
             }
           }
 
-          if (!selectedRoom) continue;
+          if (!selectedRoom) {
+            continue;
+          }
 
           // Schedule both consecutive slots
           for (const slot of consecutiveSlots) {
@@ -198,10 +218,20 @@ export function generateOptimizedTimetable({
             hoursScheduled++;
           }
 
-          console.log(`Scheduled 2-hour lab block for ${subject.name} in ${batch.name} on ${consecutiveSlots[0].day}`);
+          blocksScheduled++;
+          console.log(`✓ Scheduled 2-hour lab block ${blocksScheduled}/${blocksNeeded} for ${subject.name} in ${batch.name} on ${consecutiveSlots[0].day} at ${consecutiveSlots[0].start_time}-${consecutiveSlots[1].end_time}`);
+          
+          // Skip the next slot since we just used it
+          i++;
+        }
+        
+        if (blocksScheduled < blocksNeeded) {
+          console.warn(`⚠ Could only schedule ${blocksScheduled}/${blocksNeeded} lab blocks (${hoursScheduled}/${subject.hours_per_week} hours) for ${subject.name} in ${batch.name}`);
         }
       } else {
-        // For regular subjects, schedule hour by hour
+        // For regular subjects, schedule ONE hour at a time (not continuous)
+        console.log(`Scheduling ${subject.hours_per_week} separate 1-hour slots for ${subject.name} in ${batch.name}`);
+        
         for (const timeslot of classTimeslots) {
           if (hoursScheduled >= subject.hours_per_week) break;
 
@@ -216,7 +246,7 @@ export function generateOptimizedTimetable({
 
           if (!selectedRoom) continue;
 
-          // Schedule this class
+          // Schedule this single 1-hour class
           timetableEntries.push({
             batch_id: batch.id,
             subject_id: subject.id,
@@ -227,6 +257,8 @@ export function generateOptimizedTimetable({
 
           occupySlot(teacherId, batch.id, selectedRoom.id, timeslot.id);
           hoursScheduled++;
+          
+          console.log(`✓ Scheduled 1-hour slot ${hoursScheduled}/${subject.hours_per_week} for ${subject.name} in ${batch.name} on ${timeslot.day} at ${timeslot.start_time}`);
         }
       }
 

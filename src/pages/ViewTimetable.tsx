@@ -25,8 +25,22 @@ const ViewTimetable = () => {
           subject:subjects(name, code, type),
           teacher:teachers(name),
           room:rooms(number),
-          timeslot:timeslots(day, start_time, end_time)
+          timeslot:timeslots(day, start_time, end_time, is_break)
         `);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Fetch all timeslots to build the timetable structure
+  const { data: allTimeslots } = useQuery({
+    queryKey: ["timeslots"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("timeslots")
+        .select("*")
+        .order("day", { ascending: true })
+        .order("start_time", { ascending: true });
       if (error) throw error;
       return data;
     },
@@ -75,13 +89,26 @@ const ViewTimetable = () => {
     }
   });
 
-  // Organize data by days and time slots
-  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-  const timeSlots = ["09:00", "10:00", "11:00", "12:00", "14:00", "15:00", "16:00"];
+  // Organize data by days and time slots from database
+  const dayOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  
+  // Get unique days that have timeslots
+  const uniqueDays = [...new Set(allTimeslots?.map(t => t.day) || [])].sort(
+    (a, b) => dayOrder.indexOf(a) - dayOrder.indexOf(b)
+  );
 
-  const getClassForSlot = (day: string, time: string) => {
+  // Get timeslots grouped by time (across all days)
+  const uniqueTimeSlots = [...new Set(allTimeslots?.map(t => `${t.start_time}-${t.end_time}`) || [])].sort();
+
+  const getTimeslotInfo = (day: string, timeRange: string) => {
+    const [startTime] = timeRange.split('-');
+    return allTimeslots?.find(t => t.day === day && t.start_time === startTime);
+  };
+
+  const getClassForSlot = (day: string, timeRange: string) => {
+    const [startTime] = timeRange.split('-');
     return filteredData?.find(entry => 
-      entry.timeslot.day === day && entry.timeslot.start_time === time
+      entry.timeslot.day === day && entry.timeslot.start_time === startTime
     );
   };
 
@@ -201,22 +228,28 @@ const ViewTimetable = () => {
                 <thead>
                   <tr className="bg-muted">
                     <th className="border border-border p-3 text-left font-semibold">Time</th>
-                    {days.map(day => (
+                    {uniqueDays.map(day => (
                       <th key={day} className="border border-border p-3 text-left font-semibold">{day}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {timeSlots.map(time => (
-                    <tr key={time}>
+                  {uniqueTimeSlots.map(timeRange => (
+                    <tr key={timeRange}>
                       <td className="border border-border p-3 font-medium bg-muted/50">
-                        {time} - {parseInt(time.split(':')[0]) + 1}:00
+                        {timeRange}
                       </td>
-                      {days.map(day => {
-                        const classEntry = getClassForSlot(day, time);
+                      {uniqueDays.map(day => {
+                        const timeslotInfo = getTimeslotInfo(day, timeRange);
+                        const classEntry = getClassForSlot(day, timeRange);
+                        
                         return (
-                          <td key={`${day}-${time}`} className="border border-border p-2">
-                            {classEntry ? (
+                          <td key={`${day}-${timeRange}`} className="border border-border p-2">
+                            {timeslotInfo?.is_break ? (
+                              <div className="p-3 rounded-lg text-sm bg-orange-100 border-l-4 border-orange-500">
+                                <div className="font-semibold text-foreground text-center">☕ Break</div>
+                              </div>
+                            ) : classEntry ? (
                               <div className={`p-3 rounded-lg text-sm ${
                                 classEntry.subject.type === 'Lab' 
                                   ? 'bg-purple-100 border-l-4 border-purple-500' 
