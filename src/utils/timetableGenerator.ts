@@ -91,11 +91,15 @@ export function generateOptimizedTimetable({
   const teacherSlots = new Map<string, Set<string>>();
   const roomSlots = new Map<string, Set<string>>();
   const batchSlots = new Map<string, Set<string>>();
+  const batchDaySubjects = new Map<string, Map<string, string[]>>(); // batch_id -> day -> [subject_ids in order]
 
   // Initialize tracking maps
   teachers.forEach(t => teacherSlots.set(t.id, new Set()));
   rooms.forEach(r => roomSlots.set(r.id, new Set()));
-  batches.forEach(b => batchSlots.set(b.id, new Set()));
+  batches.forEach(b => {
+    batchSlots.set(b.id, new Set());
+    batchDaySubjects.set(b.id, new Map());
+  });
 
   // Helper function to check if a slot is available
   const isSlotAvailable = (teacherId: string, batchId: string, roomId: string, timeslotId: string): boolean => {
@@ -105,10 +109,31 @@ export function generateOptimizedTimetable({
   };
 
   // Helper function to mark slot as occupied
-  const occupySlot = (teacherId: string, batchId: string, roomId: string, timeslotId: string) => {
+  const occupySlot = (teacherId: string, batchId: string, roomId: string, timeslotId: string, subjectId: string, day: string) => {
     teacherSlots.get(teacherId)?.add(timeslotId);
     batchSlots.get(batchId)?.add(timeslotId);
     roomSlots.get(roomId)?.add(timeslotId);
+    
+    // Track subject order per batch per day
+    const batchDays = batchDaySubjects.get(batchId);
+    if (batchDays) {
+      if (!batchDays.has(day)) {
+        batchDays.set(day, []);
+      }
+      batchDays.get(day)?.push(subjectId);
+    }
+  };
+
+  // Helper function to check if subject would be consecutive on the same day
+  const wouldBeConsecutive = (batchId: string, subjectId: string, day: string): boolean => {
+    const batchDays = batchDaySubjects.get(batchId);
+    if (!batchDays) return false;
+    
+    const daySubjects = batchDays.get(day);
+    if (!daySubjects || daySubjects.length === 0) return false;
+    
+    // Check if the last scheduled subject on this day is the same
+    return daySubjects[daySubjects.length - 1] === subjectId;
   };
 
   // Helper function to find consecutive slots on the same day
@@ -214,7 +239,7 @@ export function generateOptimizedTimetable({
               timeslot_id: slot.id,
             });
 
-            occupySlot(teacherId, batch.id, selectedRoom.id, slot.id);
+            occupySlot(teacherId, batch.id, selectedRoom.id, slot.id, subject.id, slot.day);
             hoursScheduled++;
           }
 
@@ -229,21 +254,22 @@ export function generateOptimizedTimetable({
           console.warn(`⚠ Could only schedule ${blocksScheduled}/${blocksNeeded} lab blocks (${hoursScheduled}/${subject.hours_per_week} hours) for ${subject.name} in ${batch.name}`);
         }
       } else {
-        // For regular subjects, distribute across different days and avoid consecutive slots
+        // For regular subjects, distribute across different days and avoid consecutive classes of same subject
         console.log(`Scheduling ${subject.hours_per_week} distributed 1-hour slots for ${subject.name} in ${batch.name}`);
         
         const scheduledDays = new Map<string, number>(); // Track slots per day
-        let lastScheduledIndex = -2; // Track last scheduled slot index to avoid consecutive
         
-        // Try to schedule across different days first
-        for (let attempt = 0; attempt < classTimeslots.length && hoursScheduled < subject.hours_per_week; attempt++) {
+        // Try multiple passes to schedule all required hours
+        for (let attempt = 0; attempt < 3 && hoursScheduled < subject.hours_per_week; attempt++) {
           for (let i = 0; i < classTimeslots.length && hoursScheduled < subject.hours_per_week; i++) {
             const timeslot = classTimeslots[i];
             
-            // Skip if this would be consecutive to the last scheduled slot
-            if (Math.abs(i - lastScheduledIndex) === 1) continue;
+            // Skip if this would create consecutive classes of the same subject on this day
+            if (wouldBeConsecutive(batch.id, subject.id, timeslot.day)) {
+              continue;
+            }
             
-            // On first pass, prefer days with fewer scheduled slots
+            // On first pass, prefer days with fewer scheduled slots of this subject
             const dayCount = scheduledDays.get(timeslot.day) || 0;
             if (attempt === 0 && dayCount > 0) continue; // First pass: one per day
             if (attempt === 1 && dayCount > 1) continue; // Second pass: max 2 per day
@@ -268,9 +294,8 @@ export function generateOptimizedTimetable({
               timeslot_id: timeslot.id,
             });
 
-            occupySlot(teacherId, batch.id, selectedRoom.id, timeslot.id);
+            occupySlot(teacherId, batch.id, selectedRoom.id, timeslot.id, subject.id, timeslot.day);
             scheduledDays.set(timeslot.day, (scheduledDays.get(timeslot.day) || 0) + 1);
-            lastScheduledIndex = i;
             hoursScheduled++;
             
             console.log(`✓ Scheduled 1-hour slot ${hoursScheduled}/${subject.hours_per_week} for ${subject.name} in ${batch.name} on ${timeslot.day} at ${timeslot.start_time}`);
