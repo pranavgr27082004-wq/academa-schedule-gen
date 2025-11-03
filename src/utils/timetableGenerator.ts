@@ -160,156 +160,187 @@ export function generateOptimizedTimetable({
     return slots;
   };
 
-  // For each batch, schedule all subjects
+  // Separate subjects into labs and theory
+  const labSubjects = subjects.filter(s => s.type === 'Lab');
+  const theorySubjects = subjects.filter(s => s.type !== 'Lab');
+
+  console.log(`Found ${labSubjects.length} lab subjects and ${theorySubjects.length} theory subjects`);
+
+  // PHASE 1: Schedule all lab subjects first (2-hour continuous blocks)
+  // Use round-robin approach to ensure fair distribution
+  console.log('\n=== PHASE 1: Scheduling Lab Subjects ===');
+  
   for (const batch of batches) {
-    for (const subject of subjects) {
+    for (const subject of labSubjects) {
       // Find teacher for this subject
       const teacherIds = assignments
         .filter(a => a.subject_id === subject.id)
         .map(a => a.teacher_id);
       
       if (teacherIds.length === 0) {
-        console.warn(`No teacher assigned for subject: ${subject.name}`);
+        console.warn(`No teacher assigned for lab subject: ${subject.name}`);
         continue;
       }
 
-      // Use first available teacher
       const teacherId = teacherIds[0];
 
-      // Find appropriate room - for labs, prefer lab rooms but allow regular rooms if needed
-      let appropriateRooms = rooms.filter(r => {
-        if (subject.type === 'Lab') {
-          return r.type === 'Lab';
-        }
-        return true;
-      });
-
-      // If no lab rooms available for a lab subject, use any available room
-      if (appropriateRooms.length === 0 && subject.type === 'Lab') {
-        console.warn(`No lab rooms found for ${subject.name}, will use any available room`);
+      // Find lab rooms - prefer lab type but allow regular rooms if needed
+      let appropriateRooms = rooms.filter(r => r.type === 'Lab');
+      
+      if (appropriateRooms.length === 0) {
+        console.warn(`No dedicated lab rooms found for ${subject.name}, using any available room`);
         appropriateRooms = rooms;
       }
 
       if (appropriateRooms.length === 0) {
-        console.warn(`No rooms available for subject: ${subject.name} (${subject.type})`);
+        console.warn(`No rooms available for lab subject: ${subject.name}`);
         continue;
       }
 
-      // Schedule required hours
+      const blocksNeeded = Math.ceil(subject.hours_per_week / 2);
+      let blocksScheduled = 0;
       let hoursScheduled = 0;
       
-      // For Lab subjects, schedule in 2-hour continuous blocks
-      if (subject.type === 'Lab') {
-        const blocksNeeded = Math.ceil(subject.hours_per_week / 2);
-        let blocksScheduled = 0;
+      console.log(`\nScheduling ${blocksNeeded} 2-hour blocks for ${subject.name} in ${batch.name}`);
+      
+      // Try to schedule each 2-hour block
+      for (let i = 0; i < classTimeslots.length && blocksScheduled < blocksNeeded; i++) {
+        const consecutiveSlots = findConsecutiveSlots(i, 2);
         
-        console.log(`Attempting to schedule ${blocksNeeded} 2-hour lab blocks for ${subject.name} in ${batch.name}`);
+        if (!consecutiveSlots) {
+          continue;
+        }
+
+        const day = consecutiveSlots[0].day;
         
-        for (let i = 0; i < classTimeslots.length && blocksScheduled < blocksNeeded; i++) {
-          const consecutiveSlots = findConsecutiveSlots(i, 2);
+        // Try each room to find one that's available for both slots
+        let selectedRoom = null;
+        for (const room of appropriateRooms) {
+          const allSlotsAvailable = consecutiveSlots.every(slot => 
+            isSlotAvailable(teacherId, batch.id, room.id, slot.id)
+          );
           
-          if (!consecutiveSlots) {
+          if (allSlotsAvailable) {
+            selectedRoom = room;
+            break;
+          }
+        }
+
+        if (!selectedRoom) {
+          continue;
+        }
+
+        // Schedule both consecutive slots for this lab block
+        for (const slot of consecutiveSlots) {
+          timetableEntries.push({
+            batch_id: batch.id,
+            subject_id: subject.id,
+            teacher_id: teacherId,
+            room_id: selectedRoom.id,
+            timeslot_id: slot.id,
+          });
+
+          occupySlot(teacherId, batch.id, selectedRoom.id, slot.id, subject.id, day);
+          hoursScheduled++;
+        }
+
+        blocksScheduled++;
+        console.log(`  ✓ Block ${blocksScheduled}/${blocksNeeded}: ${day} ${consecutiveSlots[0].start_time}-${consecutiveSlots[1].end_time} in Room ${selectedRoom.number}`);
+        
+        // Skip the next slot since we just used it
+        i++;
+      }
+      
+      if (blocksScheduled < blocksNeeded) {
+        console.warn(`  ⚠ Only scheduled ${blocksScheduled}/${blocksNeeded} blocks (${hoursScheduled}/${subject.hours_per_week} hours) for ${subject.name} in ${batch.name}`);
+      } else {
+        console.log(`  ✓ Successfully scheduled all ${blocksScheduled} blocks for ${subject.name} in ${batch.name}`);
+      }
+    }
+  }
+
+  // PHASE 2: Schedule all theory subjects with proper distribution
+  console.log('\n=== PHASE 2: Scheduling Theory Subjects ===');
+  
+  for (const batch of batches) {
+    for (const subject of theorySubjects) {
+      // Find teacher for this subject
+      const teacherIds = assignments
+        .filter(a => a.subject_id === subject.id)
+        .map(a => a.teacher_id);
+      
+      if (teacherIds.length === 0) {
+        console.warn(`No teacher assigned for theory subject: ${subject.name}`);
+        continue;
+      }
+
+      const teacherId = teacherIds[0];
+
+      // All rooms can be used for theory classes
+      const appropriateRooms = rooms;
+
+      if (appropriateRooms.length === 0) {
+        console.warn(`No rooms available for theory subject: ${subject.name}`);
+        continue;
+      }
+
+      let hoursScheduled = 0;
+      const scheduledDays = new Map<string, number>();
+      
+      console.log(`\nScheduling ${subject.hours_per_week} hours for ${subject.name} in ${batch.name}`);
+      
+      // Multi-pass scheduling to ensure proper distribution
+      // Pass 1: One slot per day (maximum distribution)
+      // Pass 2: Two slots per day if needed
+      // Pass 3: More slots if still needed
+      for (let attempt = 0; attempt < 3 && hoursScheduled < subject.hours_per_week; attempt++) {
+        for (let i = 0; i < classTimeslots.length && hoursScheduled < subject.hours_per_week; i++) {
+          const timeslot = classTimeslots[i];
+          const day = timeslot.day;
+          
+          // CRITICAL: Skip if this would create consecutive classes of the same subject
+          if (wouldBeConsecutive(batch.id, subject.id, day)) {
             continue;
           }
+          
+          // Distribution strategy based on attempt
+          const dayCount = scheduledDays.get(day) || 0;
+          if (attempt === 0 && dayCount > 0) continue; // Pass 1: max 1 per day
+          if (attempt === 1 && dayCount > 1) continue; // Pass 2: max 2 per day
+          // Pass 3: no day limit
 
-          // Check if all 2 slots are available for teacher, batch, and find available room
+          // Find an available room for this slot
           let selectedRoom = null;
           for (const room of appropriateRooms) {
-            const allSlotsAvailable = consecutiveSlots.every(slot => 
-              isSlotAvailable(teacherId, batch.id, room.id, slot.id)
-            );
-            
-            if (allSlotsAvailable) {
+            if (isSlotAvailable(teacherId, batch.id, room.id, timeslot.id)) {
               selectedRoom = room;
               break;
             }
           }
 
-          if (!selectedRoom) {
-            continue;
-          }
+          if (!selectedRoom) continue;
 
-          // Schedule both consecutive slots
-          for (const slot of consecutiveSlots) {
-            timetableEntries.push({
-              batch_id: batch.id,
-              subject_id: subject.id,
-              teacher_id: teacherId,
-              room_id: selectedRoom.id,
-              timeslot_id: slot.id,
-            });
+          // Schedule this 1-hour theory class
+          timetableEntries.push({
+            batch_id: batch.id,
+            subject_id: subject.id,
+            teacher_id: teacherId,
+            room_id: selectedRoom.id,
+            timeslot_id: timeslot.id,
+          });
 
-            occupySlot(teacherId, batch.id, selectedRoom.id, slot.id, subject.id, slot.day);
-            hoursScheduled++;
-          }
-
-          blocksScheduled++;
-          console.log(`✓ Scheduled 2-hour lab block ${blocksScheduled}/${blocksNeeded} for ${subject.name} in ${batch.name} on ${consecutiveSlots[0].day} at ${consecutiveSlots[0].start_time}-${consecutiveSlots[1].end_time}`);
+          occupySlot(teacherId, batch.id, selectedRoom.id, timeslot.id, subject.id, day);
+          scheduledDays.set(day, (scheduledDays.get(day) || 0) + 1);
+          hoursScheduled++;
           
-          // Skip the next slot since we just used it
-          i++;
-        }
-        
-        if (blocksScheduled < blocksNeeded) {
-          console.warn(`⚠ Could only schedule ${blocksScheduled}/${blocksNeeded} lab blocks (${hoursScheduled}/${subject.hours_per_week} hours) for ${subject.name} in ${batch.name}`);
-        }
-      } else {
-        // For regular subjects, distribute across different days and avoid consecutive classes of same subject
-        console.log(`Scheduling ${subject.hours_per_week} distributed 1-hour slots for ${subject.name} in ${batch.name}`);
-        
-        const scheduledDays = new Map<string, number>(); // Track slots per day
-        
-        // Try multiple passes to schedule all required hours
-        for (let attempt = 0; attempt < 3 && hoursScheduled < subject.hours_per_week; attempt++) {
-          for (let i = 0; i < classTimeslots.length && hoursScheduled < subject.hours_per_week; i++) {
-            const timeslot = classTimeslots[i];
-            
-            // Skip if this would create consecutive classes of the same subject on this day
-            if (wouldBeConsecutive(batch.id, subject.id, timeslot.day)) {
-              continue;
-            }
-            
-            // On first pass, prefer days with fewer scheduled slots of this subject
-            const dayCount = scheduledDays.get(timeslot.day) || 0;
-            if (attempt === 0 && dayCount > 0) continue; // First pass: one per day
-            if (attempt === 1 && dayCount > 1) continue; // Second pass: max 2 per day
-
-            // Find an available room
-            let selectedRoom = null;
-            for (const room of appropriateRooms) {
-              if (isSlotAvailable(teacherId, batch.id, room.id, timeslot.id)) {
-                selectedRoom = room;
-                break;
-              }
-            }
-
-            if (!selectedRoom) continue;
-
-            // Schedule this single 1-hour class
-            timetableEntries.push({
-              batch_id: batch.id,
-              subject_id: subject.id,
-              teacher_id: teacherId,
-              room_id: selectedRoom.id,
-              timeslot_id: timeslot.id,
-            });
-
-            occupySlot(teacherId, batch.id, selectedRoom.id, timeslot.id, subject.id, timeslot.day);
-            scheduledDays.set(timeslot.day, (scheduledDays.get(timeslot.day) || 0) + 1);
-            hoursScheduled++;
-            
-            console.log(`✓ Scheduled 1-hour slot ${hoursScheduled}/${subject.hours_per_week} for ${subject.name} in ${batch.name} on ${timeslot.day} at ${timeslot.start_time}`);
-          }
+          console.log(`  ✓ Slot ${hoursScheduled}/${subject.hours_per_week}: ${day} ${timeslot.start_time} in Room ${selectedRoom.number}`);
         }
       }
 
-      // If we couldn't schedule all hours, log a warning
       if (hoursScheduled < subject.hours_per_week) {
-        console.warn(
-          `Could only schedule ${hoursScheduled}/${subject.hours_per_week} hours for ${subject.name} in ${batch.name}`
-        );
+        console.warn(`  ⚠ Only scheduled ${hoursScheduled}/${subject.hours_per_week} hours for ${subject.name} in ${batch.name}`);
       } else {
-        console.log(`Successfully scheduled ${hoursScheduled} hours for ${subject.name} in ${batch.name}`);
+        console.log(`  ✓ Successfully scheduled all ${hoursScheduled} hours for ${subject.name} in ${batch.name}`);
       }
     }
   }
