@@ -92,9 +92,13 @@ export function generateOptimizedTimetable({
   const roomSlots = new Map<string, Set<string>>();
   const batchSlots = new Map<string, Set<string>>();
   const batchDaySubjects = new Map<string, Map<string, string[]>>(); // batch_id -> day -> [subject_ids in order]
+  const teacherDayWorkload = new Map<string, Map<string, number>>(); // teacher_id -> day -> hours_count
 
   // Initialize tracking maps
-  teachers.forEach(t => teacherSlots.set(t.id, new Set()));
+  teachers.forEach(t => {
+    teacherSlots.set(t.id, new Set());
+    teacherDayWorkload.set(t.id, new Map());
+  });
   rooms.forEach(r => roomSlots.set(r.id, new Set()));
   batches.forEach(b => {
     batchSlots.set(b.id, new Set());
@@ -114,6 +118,13 @@ export function generateOptimizedTimetable({
     batchSlots.get(batchId)?.add(timeslotId);
     roomSlots.get(roomId)?.add(timeslotId);
     
+    // Track teacher workload per day
+    const teacherWorkload = teacherDayWorkload.get(teacherId);
+    if (teacherWorkload) {
+      const currentHours = teacherWorkload.get(day) || 0;
+      teacherWorkload.set(day, currentHours + 1);
+    }
+    
     // Track subject order per batch per day
     const batchDays = batchDaySubjects.get(batchId);
     if (batchDays) {
@@ -122,6 +133,32 @@ export function generateOptimizedTimetable({
       }
       batchDays.get(day)?.push(subjectId);
     }
+  };
+
+  // Helper function to check teacher workload (max 6 hours per day recommended)
+  const isTeacherOverworked = (teacherId: string, day: string, additionalHours: number = 1): boolean => {
+    const teacherWorkload = teacherDayWorkload.get(teacherId);
+    if (!teacherWorkload) return false;
+    
+    const currentHours = teacherWorkload.get(day) || 0;
+    const MAX_HOURS_PER_DAY = 6;
+    return (currentHours + additionalHours) > MAX_HOURS_PER_DAY;
+  };
+
+  // Helper function to check if teacher has a break (at least 1 hour gap in a 4-hour period)
+  const teacherNeedsBreak = (teacherId: string, timeslotIndex: number): boolean => {
+    const recentSlots = classTimeslots.slice(Math.max(0, timeslotIndex - 3), timeslotIndex);
+    let consecutiveCount = 0;
+    
+    for (let i = recentSlots.length - 1; i >= 0; i--) {
+      if (teacherSlots.get(teacherId)?.has(recentSlots[i].id)) {
+        consecutiveCount++;
+      } else {
+        break;
+      }
+    }
+    
+    return consecutiveCount >= 3; // 3 consecutive hours = needs break
   };
 
   // Helper function to check if subject would be consecutive on the same day
@@ -213,6 +250,18 @@ export function generateOptimizedTimetable({
 
         const day = consecutiveSlots[0].day;
         
+        // Check if teacher is overworked on this day
+        if (isTeacherOverworked(teacherId, day, 2)) {
+          console.log(`  ⏭ Skipping ${day} - teacher ${teacherId} would be overworked (already has ${teacherDayWorkload.get(teacherId)?.get(day) || 0} hours)`);
+          continue;
+        }
+        
+        // Check if teacher needs a break
+        if (teacherNeedsBreak(teacherId, i)) {
+          console.log(`  ⏭ Skipping slot ${i} - teacher ${teacherId} needs a break`);
+          continue;
+        }
+        
         // Try each room to find one that's available for both slots
         let selectedRoom = null;
         for (const room of appropriateRooms) {
@@ -227,6 +276,7 @@ export function generateOptimizedTimetable({
         }
 
         if (!selectedRoom) {
+          console.log(`  ⏭ No available room for ${day} ${consecutiveSlots[0].start_time}-${consecutiveSlots[1].end_time}`);
           continue;
         }
 
@@ -245,7 +295,7 @@ export function generateOptimizedTimetable({
         }
 
         blocksScheduled++;
-        console.log(`  ✓ Block ${blocksScheduled}/${blocksNeeded}: ${day} ${consecutiveSlots[0].start_time}-${consecutiveSlots[1].end_time} in Room ${selectedRoom.number}`);
+        console.log(`  ✓ Block ${blocksScheduled}/${blocksNeeded}: ${day} ${consecutiveSlots[0].start_time}-${consecutiveSlots[1].end_time} in Room ${selectedRoom.number} (Teacher workload: ${teacherDayWorkload.get(teacherId)?.get(day) || 0}h)`);
         
         // Skip the next slot since we just used it
         i++;
@@ -303,6 +353,16 @@ export function generateOptimizedTimetable({
             continue;
           }
           
+          // Check if teacher is overworked on this day
+          if (isTeacherOverworked(teacherId, day)) {
+            continue;
+          }
+          
+          // Check if teacher needs a break
+          if (teacherNeedsBreak(teacherId, i)) {
+            continue;
+          }
+          
           // Distribution strategy based on attempt
           const dayCount = scheduledDays.get(day) || 0;
           if (attempt === 0 && dayCount > 0) continue; // Pass 1: max 1 per day
@@ -333,7 +393,7 @@ export function generateOptimizedTimetable({
           scheduledDays.set(day, (scheduledDays.get(day) || 0) + 1);
           hoursScheduled++;
           
-          console.log(`  ✓ Slot ${hoursScheduled}/${subject.hours_per_week}: ${day} ${timeslot.start_time} in Room ${selectedRoom.number}`);
+          console.log(`  ✓ Slot ${hoursScheduled}/${subject.hours_per_week}: ${day} ${timeslot.start_time} in Room ${selectedRoom.number} (Teacher workload: ${teacherDayWorkload.get(teacherId)?.get(day) || 0}h)`);
         }
       }
 
