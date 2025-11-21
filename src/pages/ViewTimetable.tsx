@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { FileDown, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const ViewTimetable = () => {
   const [filterType, setFilterType] = useState<"batch" | "teacher" | "room">("batch");
@@ -113,7 +115,125 @@ const ViewTimetable = () => {
   };
 
   const exportToPDF = () => {
-    window.print();
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4"
+    });
+
+    // Custom branding - Header
+    doc.setFillColor(59, 130, 246); // Blue color
+    doc.rect(0, 0, 297, 35, "F");
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(24);
+    doc.setFont("helvetica", "bold");
+    doc.text("Academic Timetable", 148.5, 15, { align: "center" });
+    
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.text("Automated Scheduling System", 148.5, 23, { align: "center" });
+    
+    // Filter information
+    let filterText = "Complete Schedule";
+    if (selectedFilter !== "all") {
+      const filterName = filterType === "batch" 
+        ? batches?.find(b => b.id === selectedFilter)?.name
+        : filterType === "teacher"
+        ? teachers?.find(t => t.id === selectedFilter)?.name
+        : `Room ${rooms?.find(r => r.id === selectedFilter)?.number}`;
+      filterText = `${filterType.charAt(0).toUpperCase() + filterType.slice(1)}: ${filterName}`;
+    }
+    doc.text(filterText, 148.5, 30, { align: "center" });
+
+    // Prepare table data
+    const tableHeaders = ["Time", ...uniqueDays];
+    const tableData = uniqueTimeSlots.map(timeRange => {
+      const row = [timeRange];
+      
+      uniqueDays.forEach(day => {
+        const timeslotInfo = getTimeslotInfo(day, timeRange);
+        const classEntry = getClassForSlot(day, timeRange);
+        
+        if (timeslotInfo?.is_break) {
+          row.push("☕ BREAK");
+        } else if (classEntry) {
+          const cellText = `${classEntry.subject.name}\n${classEntry.teacher.name}\nRoom: ${classEntry.room.number}\n${classEntry.batch.name}`;
+          row.push(cellText);
+        } else {
+          row.push("-");
+        }
+      });
+      
+      return row;
+    });
+
+    // Generate table
+    autoTable(doc, {
+      head: [tableHeaders],
+      body: tableData,
+      startY: 40,
+      theme: "grid",
+      styles: {
+        fontSize: 8,
+        cellPadding: 3,
+        valign: "middle",
+        halign: "center",
+        lineColor: [200, 200, 200],
+        lineWidth: 0.1
+      },
+      headStyles: {
+        fillColor: [59, 130, 246],
+        textColor: [255, 255, 255],
+        fontSize: 9,
+        fontStyle: "bold",
+        halign: "center"
+      },
+      columnStyles: {
+        0: { 
+          fillColor: [243, 244, 246],
+          fontStyle: "bold",
+          cellWidth: 25
+        }
+      },
+      didParseCell: function(data) {
+        // Color code different cell types
+        if (data.section === "body" && data.column.index > 0) {
+          const cellText = data.cell.text.join("");
+          
+          if (cellText.includes("☕ BREAK")) {
+            data.cell.styles.fillColor = [254, 243, 199]; // Orange-100
+            data.cell.styles.textColor = [0, 0, 0];
+          } else if (cellText.includes("Lab")) {
+            data.cell.styles.fillColor = [243, 232, 255]; // Purple-100
+          } else if (cellText !== "-") {
+            data.cell.styles.fillColor = [219, 234, 254]; // Blue-100
+          }
+        }
+      }
+    });
+
+    // Footer
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(128, 128, 128);
+      doc.text(
+        `Generated on ${new Date().toLocaleDateString()} | Page ${i} of ${pageCount}`,
+        148.5,
+        205,
+        { align: "center" }
+      );
+    }
+
+    // Save the PDF
+    const filename = selectedFilter === "all" 
+      ? "Complete_Timetable.pdf"
+      : `${filterType}_${selectedFilter}_Timetable.pdf`;
+    
+    doc.save(filename);
+    toast.success("PDF exported successfully!");
   };
 
   const deleteTimetableMutation = useMutation({
