@@ -114,6 +114,24 @@ const ViewTimetable = () => {
     );
   };
 
+  // Fetch PDF settings
+  const { data: pdfSettings } = useQuery({
+    queryKey: ["pdf-settings"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+
+      const { data, error } = await supabase
+        .from("pdf_settings")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (error) return null;
+      return data;
+    },
+  });
+
   const exportToPDF = () => {
     const doc = new jsPDF({
       orientation: "landscape",
@@ -121,18 +139,46 @@ const ViewTimetable = () => {
       format: "a4"
     });
 
+    // Use custom settings or defaults
+    const institutionName = pdfSettings?.institution_name || "Academic Institution";
+    const logoUrl = pdfSettings?.logo_url;
+    const primaryColor = pdfSettings?.primary_color || "#3B82F6";
+    const secondaryColor = pdfSettings?.secondary_color || "#10B981";
+
+    // Convert hex to RGB
+    const hexToRgb = (hex: string) => {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+      } : { r: 59, g: 130, b: 246 };
+    };
+
+    const primaryRgb = hexToRgb(primaryColor);
+    const secondaryRgb = hexToRgb(secondaryColor);
+
     // Custom branding - Header
-    doc.setFillColor(59, 130, 246); // Blue color
-    doc.rect(0, 0, 297, 35, "F");
+    doc.setFillColor(primaryRgb.r, primaryRgb.g, primaryRgb.b);
+    doc.rect(0, 0, 297, 40, "F");
+
+    // Add logo if available
+    if (logoUrl) {
+      try {
+        doc.addImage(logoUrl, "PNG", 10, 10, 20, 20);
+      } catch (error) {
+        console.error("Failed to add logo:", error);
+      }
+    }
     
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(24);
     doc.setFont("helvetica", "bold");
-    doc.text("Academic Timetable", 148.5, 15, { align: "center" });
+    doc.text(institutionName, logoUrl ? 40 : 148.5, 20, { align: logoUrl ? "left" : "center" });
     
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
-    doc.text("Automated Scheduling System", 148.5, 23, { align: "center" });
+    doc.text("Weekly Timetable", logoUrl ? 40 : 148.5, 28, { align: logoUrl ? "left" : "center" });
     
     // Filter information
     let filterText = "Complete Schedule";
@@ -144,7 +190,7 @@ const ViewTimetable = () => {
         : `Room ${rooms?.find(r => r.id === selectedFilter)?.number}`;
       filterText = `${filterType.charAt(0).toUpperCase() + filterType.slice(1)}: ${filterName}`;
     }
-    doc.text(filterText, 148.5, 30, { align: "center" });
+    doc.text(filterText, logoUrl ? 40 : 148.5, 35, { align: logoUrl ? "left" : "center" });
 
     // Prepare table data
     const tableHeaders = ["Time", ...uniqueDays];
@@ -172,7 +218,7 @@ const ViewTimetable = () => {
     autoTable(doc, {
       head: [tableHeaders],
       body: tableData,
-      startY: 40,
+      startY: 45,
       theme: "grid",
       styles: {
         fontSize: 8,
@@ -183,7 +229,7 @@ const ViewTimetable = () => {
         lineWidth: 0.1
       },
       headStyles: {
-        fillColor: [59, 130, 246],
+        fillColor: [primaryRgb.r, primaryRgb.g, primaryRgb.b],
         textColor: [255, 255, 255],
         fontSize: 9,
         fontStyle: "bold",
