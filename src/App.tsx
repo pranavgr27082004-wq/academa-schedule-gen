@@ -16,6 +16,7 @@ import ManageBatches from "./pages/ManageBatches";
 import ManageTimeslots from "./pages/ManageTimeslots";
 import GenerateTimetable from "./pages/GenerateTimetable";
 import ViewTimetable from "./pages/ViewTimetable";
+import Settings from "./pages/Settings";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import { Button } from "@/components/ui/button";
@@ -118,6 +119,11 @@ const App = () => {
                     <Route path="/view" element={
                       <ProtectedRoute session={session}>
                         <ViewTimetable />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/settings" element={
+                      <ProtectedRoute session={session}>
+                        <Settings />
                       </ProtectedRoute>
                     } />
                     {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

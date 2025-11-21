@@ -35,6 +35,39 @@ export type Database = {
         }
         Relationships: []
       }
+      pdf_settings: {
+        Row: {
+          created_at: string
+          id: string
+          institution_name: string
+          logo_url: string | null
+          primary_color: string
+          secondary_color: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          institution_name?: string
+          logo_url?: string | null
+          primary_color?: string
+          secondary_color?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          institution_name?: string
+          logo_url?: string | null
+          primary_color?: string
+          secondary_color?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       rooms: {
         Row: {
           capacity: number

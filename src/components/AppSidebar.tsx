@@ -1,4 +1,4 @@
-import { Home, Users, BookOpen, DoorOpen, GraduationCap, Calendar, Eye, Clock } from "lucide-react";
+import { Home, Users, BookOpen, DoorOpen, GraduationCap, Calendar, Eye, Clock, Settings } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
   Sidebar,
@@ -20,6 +20,7 @@ const menuItems = [
   { title: "Time Slots", url: "/manage/timeslots", icon: Clock },
   { title: "Generate", url: "/generate", icon: Calendar },
   { title: "View Timetable", url: "/view", icon: Eye },
+  { title: "Settings", url: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
