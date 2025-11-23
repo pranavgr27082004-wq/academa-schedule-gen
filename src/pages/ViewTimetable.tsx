@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { FileDown, Trash2 } from "lucide-react";
+import { FileDown, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -131,6 +131,146 @@ const ViewTimetable = () => {
       return data;
     },
   });
+
+  // Helper function to generate PDF for a specific teacher
+  const generateTeacherPDF = (teacherId: string, teacherName: string) => {
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4"
+    });
+
+    // Use custom settings or defaults
+    const institutionName = pdfSettings?.institution_name || "Academic Institution";
+    const logoUrl = pdfSettings?.logo_url;
+    const primaryColor = pdfSettings?.primary_color || "#3B82F6";
+    const secondaryColor = pdfSettings?.secondary_color || "#10B981";
+
+    // Convert hex to RGB
+    const hexToRgb = (hex: string) => {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+      } : { r: 59, g: 130, b: 246 };
+    };
+
+    const primaryRgb = hexToRgb(primaryColor);
+    const secondaryRgb = hexToRgb(secondaryColor);
+
+    // Filter timetable data for this teacher
+    const teacherData = timetableData?.filter(entry => entry.teacher_id === teacherId);
+
+    // Custom branding - Header
+    doc.setFillColor(primaryRgb.r, primaryRgb.g, primaryRgb.b);
+    doc.rect(0, 0, 297, 40, "F");
+
+    // Add logo if available
+    if (logoUrl) {
+      try {
+        doc.addImage(logoUrl, "PNG", 10, 10, 20, 20);
+      } catch (error) {
+        console.error("Failed to add logo:", error);
+      }
+    }
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(24);
+    doc.setFont("helvetica", "bold");
+    doc.text(institutionName, logoUrl ? 40 : 148.5, 20, { align: logoUrl ? "left" : "center" });
+    
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.text("Weekly Timetable", logoUrl ? 40 : 148.5, 28, { align: logoUrl ? "left" : "center" });
+    
+    // Teacher name
+    doc.text(`Teacher: ${teacherName}`, logoUrl ? 40 : 148.5, 35, { align: logoUrl ? "left" : "center" });
+
+    // Prepare table data
+    const tableHeaders = ["Time", ...uniqueDays];
+    const tableData = uniqueTimeSlots.map(timeRange => {
+      const row = [timeRange];
+      
+      uniqueDays.forEach(day => {
+        const timeslotInfo = getTimeslotInfo(day, timeRange);
+        const classEntry = teacherData?.find(entry => 
+          entry.timeslot.day === day && entry.timeslot.start_time === timeRange.split('-')[0]
+        );
+        
+        if (timeslotInfo?.is_break) {
+          row.push("☕ BREAK");
+        } else if (classEntry) {
+          const cellText = `${classEntry.subject.name}\nRoom: ${classEntry.room.number}\n${classEntry.batch.name}`;
+          row.push(cellText);
+        } else {
+          row.push("-");
+        }
+      });
+      
+      return row;
+    });
+
+    // Generate table
+    autoTable(doc, {
+      head: [tableHeaders],
+      body: tableData,
+      startY: 45,
+      theme: "grid",
+      styles: {
+        fontSize: 8,
+        cellPadding: 3,
+        valign: "middle",
+        halign: "center",
+        lineColor: [200, 200, 200],
+        lineWidth: 0.1
+      },
+      headStyles: {
+        fillColor: [primaryRgb.r, primaryRgb.g, primaryRgb.b],
+        textColor: [255, 255, 255],
+        fontSize: 9,
+        fontStyle: "bold",
+        halign: "center"
+      },
+      columnStyles: {
+        0: { 
+          fillColor: [243, 244, 246],
+          fontStyle: "bold",
+          cellWidth: 25
+        }
+      },
+      didParseCell: function(data) {
+        if (data.section === "body" && data.column.index > 0) {
+          const cellText = data.cell.text.join("");
+          
+          if (cellText.includes("☕ BREAK")) {
+            data.cell.styles.fillColor = [254, 243, 199];
+            data.cell.styles.textColor = [0, 0, 0];
+          } else if (cellText.includes("Lab")) {
+            data.cell.styles.fillColor = [243, 232, 255];
+          } else if (cellText !== "-") {
+            data.cell.styles.fillColor = [219, 234, 254];
+          }
+        }
+      }
+    });
+
+    // Footer
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(128, 128, 128);
+      doc.text(
+        `Generated on ${new Date().toLocaleDateString()} | Page ${i} of ${pageCount}`,
+        148.5,
+        205,
+        { align: "center" }
+      );
+    }
+
+    return doc;
+  };
 
   const exportToPDF = () => {
     const doc = new jsPDF({
@@ -282,6 +422,29 @@ const ViewTimetable = () => {
     toast.success("PDF exported successfully!");
   };
 
+  const exportAllTeacherPDFs = () => {
+    if (!teachers || teachers.length === 0) {
+      toast.error("No teachers found");
+      return;
+    }
+
+    toast.info(`Generating ${teachers.length} PDFs...`);
+    
+    // Generate and download PDFs for each teacher
+    teachers.forEach((teacher, index) => {
+      setTimeout(() => {
+        const doc = generateTeacherPDF(teacher.id, teacher.name);
+        const filename = `${teacher.name.replace(/\s+/g, '_')}_Timetable.pdf`;
+        doc.save(filename);
+        
+        // Show success message after all PDFs are generated
+        if (index === teachers.length - 1) {
+          toast.success(`Successfully exported ${teachers.length} teacher timetables!`);
+        }
+      }, index * 500); // Stagger downloads by 500ms
+    });
+  };
+
   const deleteTimetableMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
@@ -349,6 +512,11 @@ const ViewTimetable = () => {
           <Button onClick={exportToPDF} variant="outline">
             <FileDown className="mr-2 h-4 w-4" />
             Export to PDF
+          </Button>
+
+          <Button onClick={exportAllTeacherPDFs} variant="secondary">
+            <Users className="mr-2 h-4 w-4" />
+            Export All Teachers
           </Button>
 
           <AlertDialog>
