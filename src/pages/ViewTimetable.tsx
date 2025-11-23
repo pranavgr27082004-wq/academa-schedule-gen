@@ -132,6 +132,260 @@ const ViewTimetable = () => {
     },
   });
 
+  // Helper function to generate PDF for a specific batch
+  const generateBatchPDF = (batchId: string, batchName: string) => {
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4"
+    });
+
+    const institutionName = pdfSettings?.institution_name || "Academic Institution";
+    const logoUrl = pdfSettings?.logo_url;
+    const primaryColor = pdfSettings?.primary_color || "#3B82F6";
+
+    const hexToRgb = (hex: string) => {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+      } : { r: 59, g: 130, b: 246 };
+    };
+
+    const primaryRgb = hexToRgb(primaryColor);
+    const batchData = timetableData?.filter(entry => entry.batch_id === batchId);
+
+    doc.setFillColor(primaryRgb.r, primaryRgb.g, primaryRgb.b);
+    doc.rect(0, 0, 297, 40, "F");
+
+    if (logoUrl) {
+      try {
+        doc.addImage(logoUrl, "PNG", 10, 10, 20, 20);
+      } catch (error) {
+        console.error("Failed to add logo:", error);
+      }
+    }
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(24);
+    doc.setFont("helvetica", "bold");
+    doc.text(institutionName, logoUrl ? 40 : 148.5, 20, { align: logoUrl ? "left" : "center" });
+    
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.text("Weekly Timetable", logoUrl ? 40 : 148.5, 28, { align: logoUrl ? "left" : "center" });
+    doc.text(`Batch: ${batchName}`, logoUrl ? 40 : 148.5, 35, { align: logoUrl ? "left" : "center" });
+
+    const tableHeaders = ["Time", ...uniqueDays];
+    const tableData = uniqueTimeSlots.map(timeRange => {
+      const row = [timeRange];
+      
+      uniqueDays.forEach(day => {
+        const timeslotInfo = getTimeslotInfo(day, timeRange);
+        const classEntry = batchData?.find(entry => 
+          entry.timeslot.day === day && entry.timeslot.start_time === timeRange.split('-')[0]
+        );
+        
+        if (timeslotInfo?.is_break) {
+          row.push("☕ BREAK");
+        } else if (classEntry) {
+          const cellText = `${classEntry.subject.name}\n${classEntry.teacher.name}\nRoom: ${classEntry.room.number}`;
+          row.push(cellText);
+        } else {
+          row.push("-");
+        }
+      });
+      
+      return row;
+    });
+
+    autoTable(doc, {
+      head: [tableHeaders],
+      body: tableData,
+      startY: 45,
+      theme: "grid",
+      styles: {
+        fontSize: 8,
+        cellPadding: 3,
+        valign: "middle",
+        halign: "center",
+        lineColor: [200, 200, 200],
+        lineWidth: 0.1
+      },
+      headStyles: {
+        fillColor: [primaryRgb.r, primaryRgb.g, primaryRgb.b],
+        textColor: [255, 255, 255],
+        fontSize: 9,
+        fontStyle: "bold",
+        halign: "center"
+      },
+      columnStyles: {
+        0: { 
+          fillColor: [243, 244, 246],
+          fontStyle: "bold",
+          cellWidth: 25
+        }
+      },
+      didParseCell: function(data) {
+        if (data.section === "body" && data.column.index > 0) {
+          const cellText = data.cell.text.join("");
+          
+          if (cellText.includes("☕ BREAK")) {
+            data.cell.styles.fillColor = [254, 243, 199];
+            data.cell.styles.textColor = [0, 0, 0];
+          } else if (cellText.includes("Lab")) {
+            data.cell.styles.fillColor = [243, 232, 255];
+          } else if (cellText !== "-") {
+            data.cell.styles.fillColor = [219, 234, 254];
+          }
+        }
+      }
+    });
+
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(128, 128, 128);
+      doc.text(
+        `Generated on ${new Date().toLocaleDateString()} | Page ${i} of ${pageCount}`,
+        148.5,
+        205,
+        { align: "center" }
+      );
+    }
+
+    return doc;
+  };
+
+  // Helper function to generate PDF for a specific room
+  const generateRoomPDF = (roomId: string, roomNumber: string) => {
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4"
+    });
+
+    const institutionName = pdfSettings?.institution_name || "Academic Institution";
+    const logoUrl = pdfSettings?.logo_url;
+    const primaryColor = pdfSettings?.primary_color || "#3B82F6";
+
+    const hexToRgb = (hex: string) => {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+      } : { r: 59, g: 130, b: 246 };
+    };
+
+    const primaryRgb = hexToRgb(primaryColor);
+    const roomData = timetableData?.filter(entry => entry.room_id === roomId);
+
+    doc.setFillColor(primaryRgb.r, primaryRgb.g, primaryRgb.b);
+    doc.rect(0, 0, 297, 40, "F");
+
+    if (logoUrl) {
+      try {
+        doc.addImage(logoUrl, "PNG", 10, 10, 20, 20);
+      } catch (error) {
+        console.error("Failed to add logo:", error);
+      }
+    }
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(24);
+    doc.setFont("helvetica", "bold");
+    doc.text(institutionName, logoUrl ? 40 : 148.5, 20, { align: logoUrl ? "left" : "center" });
+    
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.text("Weekly Timetable", logoUrl ? 40 : 148.5, 28, { align: logoUrl ? "left" : "center" });
+    doc.text(`Room: ${roomNumber}`, logoUrl ? 40 : 148.5, 35, { align: logoUrl ? "left" : "center" });
+
+    const tableHeaders = ["Time", ...uniqueDays];
+    const tableData = uniqueTimeSlots.map(timeRange => {
+      const row = [timeRange];
+      
+      uniqueDays.forEach(day => {
+        const timeslotInfo = getTimeslotInfo(day, timeRange);
+        const classEntry = roomData?.find(entry => 
+          entry.timeslot.day === day && entry.timeslot.start_time === timeRange.split('-')[0]
+        );
+        
+        if (timeslotInfo?.is_break) {
+          row.push("☕ BREAK");
+        } else if (classEntry) {
+          const cellText = `${classEntry.subject.name}\n${classEntry.teacher.name}\n${classEntry.batch.name}`;
+          row.push(cellText);
+        } else {
+          row.push("-");
+        }
+      });
+      
+      return row;
+    });
+
+    autoTable(doc, {
+      head: [tableHeaders],
+      body: tableData,
+      startY: 45,
+      theme: "grid",
+      styles: {
+        fontSize: 8,
+        cellPadding: 3,
+        valign: "middle",
+        halign: "center",
+        lineColor: [200, 200, 200],
+        lineWidth: 0.1
+      },
+      headStyles: {
+        fillColor: [primaryRgb.r, primaryRgb.g, primaryRgb.b],
+        textColor: [255, 255, 255],
+        fontSize: 9,
+        fontStyle: "bold",
+        halign: "center"
+      },
+      columnStyles: {
+        0: { 
+          fillColor: [243, 244, 246],
+          fontStyle: "bold",
+          cellWidth: 25
+        }
+      },
+      didParseCell: function(data) {
+        if (data.section === "body" && data.column.index > 0) {
+          const cellText = data.cell.text.join("");
+          
+          if (cellText.includes("☕ BREAK")) {
+            data.cell.styles.fillColor = [254, 243, 199];
+            data.cell.styles.textColor = [0, 0, 0];
+          } else if (cellText.includes("Lab")) {
+            data.cell.styles.fillColor = [243, 232, 255];
+          } else if (cellText !== "-") {
+            data.cell.styles.fillColor = [219, 234, 254];
+          }
+        }
+      }
+    });
+
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(128, 128, 128);
+      doc.text(
+        `Generated on ${new Date().toLocaleDateString()} | Page ${i} of ${pageCount}`,
+        148.5,
+        205,
+        { align: "center" }
+      );
+    }
+
+    return doc;
+  };
+
   // Helper function to generate PDF for a specific teacher
   const generateTeacherPDF = (teacherId: string, teacherName: string) => {
     const doc = new jsPDF({
@@ -430,18 +684,58 @@ const ViewTimetable = () => {
 
     toast.info(`Generating ${teachers.length} PDFs...`);
     
-    // Generate and download PDFs for each teacher
     teachers.forEach((teacher, index) => {
       setTimeout(() => {
         const doc = generateTeacherPDF(teacher.id, teacher.name);
         const filename = `${teacher.name.replace(/\s+/g, '_')}_Timetable.pdf`;
         doc.save(filename);
         
-        // Show success message after all PDFs are generated
         if (index === teachers.length - 1) {
           toast.success(`Successfully exported ${teachers.length} teacher timetables!`);
         }
-      }, index * 500); // Stagger downloads by 500ms
+      }, index * 500);
+    });
+  };
+
+  const exportAllBatchPDFs = () => {
+    if (!batches || batches.length === 0) {
+      toast.error("No batches found");
+      return;
+    }
+
+    toast.info(`Generating ${batches.length} PDFs...`);
+    
+    batches.forEach((batch, index) => {
+      setTimeout(() => {
+        const doc = generateBatchPDF(batch.id, batch.name);
+        const filename = `${batch.name.replace(/\s+/g, '_')}_Timetable.pdf`;
+        doc.save(filename);
+        
+        if (index === batches.length - 1) {
+          toast.success(`Successfully exported ${batches.length} batch timetables!`);
+        }
+      }, index * 500);
+    });
+  };
+
+  const exportAllRoomPDFs = () => {
+    if (!rooms || rooms.length === 0) {
+      toast.error("No rooms found");
+      return;
+    }
+
+    toast.info(`Generating ${rooms.length} PDFs...`);
+    
+    rooms.forEach((room, index) => {
+      setTimeout(() => {
+        const doc = generateRoomPDF(room.id, room.number);
+        const filename = `Room_${room.number.replace(/\s+/g, '_')}_Timetable.pdf`;
+        doc.save(filename);
+        
+        if (index === rooms.length - 1) {
+          toast.success(`Successfully exported ${rooms.length} room timetables!`);
+        }
+      }, index * 500);
     });
   };
 
@@ -509,15 +803,27 @@ const ViewTimetable = () => {
             </Select>
           </div>
 
-          <Button onClick={exportToPDF} variant="outline">
-            <FileDown className="mr-2 h-4 w-4" />
-            Export to PDF
-          </Button>
+          <div className="flex gap-2 flex-wrap">
+            <Button onClick={exportToPDF} variant="outline">
+              <FileDown className="mr-2 h-4 w-4" />
+              Export Current View
+            </Button>
 
-          <Button onClick={exportAllTeacherPDFs} variant="secondary">
-            <Users className="mr-2 h-4 w-4" />
-            Export All Teachers
-          </Button>
+            <Button onClick={exportAllTeacherPDFs} variant="secondary">
+              <Users className="mr-2 h-4 w-4" />
+              Export All Teachers
+            </Button>
+
+            <Button onClick={exportAllBatchPDFs} variant="secondary">
+              <Users className="mr-2 h-4 w-4" />
+              Export All Batches
+            </Button>
+
+            <Button onClick={exportAllRoomPDFs} variant="secondary">
+              <Users className="mr-2 h-4 w-4" />
+              Export All Rooms
+            </Button>
+          </div>
 
           <AlertDialog>
             <AlertDialogTrigger asChild>
