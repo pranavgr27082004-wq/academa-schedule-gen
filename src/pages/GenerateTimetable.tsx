@@ -4,12 +4,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Calendar, Loader2 } from "lucide-react";
+import { Calendar, Loader2, AlertCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { Progress } from "@/components/ui/progress";
 import { generateOptimizedTimetable } from "@/utils/timetableGenerator";
 
 const GenerateTimetable = () => {
   const [isGenerating, setIsGenerating] = useState(false);
+  const [progress, setProgress] = useState(0);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -105,6 +107,7 @@ const GenerateTimetable = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["timetable"] });
+      setProgress(100);
       toast.success("Timetable generated successfully!");
       setTimeout(() => {
         navigate("/view");
@@ -115,21 +118,31 @@ const GenerateTimetable = () => {
     },
     onSettled: () => {
       setIsGenerating(false);
+      setProgress(0);
     },
   });
 
   const handleGenerate = async () => {
     setIsGenerating(true);
+    setProgress(10);
+    
     // Refetch all data to ensure we have the latest timeslots
     await queryClient.invalidateQueries({ queryKey: ["timeslots"] });
+    setProgress(30);
     await queryClient.invalidateQueries({ queryKey: ["teachers"] });
+    setProgress(40);
     await queryClient.invalidateQueries({ queryKey: ["subjects"] });
+    setProgress(50);
     await queryClient.invalidateQueries({ queryKey: ["rooms"] });
+    setProgress(60);
     await queryClient.invalidateQueries({ queryKey: ["batches"] });
+    setProgress(70);
     await queryClient.invalidateQueries({ queryKey: ["teacher-subject-assignments"] });
+    setProgress(80);
     
     // Wait a bit for queries to refetch
     setTimeout(() => {
+      setProgress(90);
       generateMutation.mutate();
     }, 100);
   };
@@ -170,20 +183,40 @@ const GenerateTimetable = () => {
               </div>
 
               {isGenerating ? (
-                <div className="flex flex-col items-center justify-center py-8 space-y-4">
-                  <Loader2 className="h-12 w-12 animate-spin text-accent" />
-                  <p className="text-lg font-medium text-foreground">Optimizing schedules...</p>
-                  <p className="text-sm text-muted-foreground">This may take a moment</p>
+                <div className="flex flex-col items-center justify-center py-8 space-y-6">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-gradient-primary opacity-20 blur-2xl rounded-full animate-pulse" />
+                    <Loader2 className="h-16 w-16 animate-spin text-accent relative z-10" />
+                  </div>
+                  <div className="text-center space-y-2">
+                    <p className="text-lg font-semibold bg-gradient-primary bg-clip-text text-transparent">
+                      Optimizing schedules...
+                    </p>
+                    <p className="text-sm text-muted-foreground">Analyzing constraints and allocating resources</p>
+                  </div>
+                  <div className="w-full max-w-xs space-y-2">
+                    <Progress value={progress} className="h-3" />
+                    <p className="text-xs text-center text-muted-foreground">{progress}% complete</p>
+                  </div>
                 </div>
               ) : (
-                <Button 
-                  onClick={handleGenerate}
-                  className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
-                  size="lg"
-                >
-                  <Calendar className="mr-2 h-5 w-5" />
-                  Generate Weekly Timetable
-                </Button>
+                <>
+                  <div className="bg-accent/5 border border-accent/20 rounded-lg p-4 flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-accent flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-muted-foreground">
+                      <p className="font-medium text-foreground mb-1">Before you generate:</p>
+                      <p>Make sure you have added teachers, subjects, rooms, batches, and time slots. The system will clear any existing timetable.</p>
+                    </div>
+                  </div>
+                  <Button 
+                    onClick={handleGenerate}
+                    className="w-full bg-gradient-primary hover:shadow-glow transition-all"
+                    size="lg"
+                  >
+                    <Calendar className="mr-2 h-5 w-5" />
+                    Generate Weekly Timetable
+                  </Button>
+                </>
               )}
             </div>
           </CardContent>
