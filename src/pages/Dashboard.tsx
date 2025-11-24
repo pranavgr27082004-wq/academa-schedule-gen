@@ -56,38 +56,48 @@ const Dashboard = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-subtle">
       <div className="max-w-7xl mx-auto p-8">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-foreground mb-2">Dashboard</h1>
-          <p className="text-muted-foreground">Manage your academic timetable efficiently</p>
+        <div className="mb-8 animate-fade-in">
+          <h1 className="text-5xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-2">
+            Dashboard
+          </h1>
+          <p className="text-muted-foreground text-lg">Manage your academic timetable efficiently</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {stats.map((stat) => (
-            <Card key={stat.title} className="hover:shadow-lg transition-shadow">
+          {stats.map((stat, index) => (
+            <Card 
+              key={stat.title} 
+              className="hover-lift hover:border-primary/40 transition-all animate-slide-up border-border/50 bg-gradient-card"
+              style={{ animationDelay: `${index * 0.1}s` }}
+            >
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
                   {stat.title}
                 </CardTitle>
-                <stat.icon className={`h-5 w-5 ${stat.color}`} />
+                <div className="p-2 bg-gradient-primary rounded-lg">
+                  <stat.icon className="h-5 w-5 text-white" />
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-foreground">{stat.value}</div>
+                <div className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+                  {stat.value}
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card className="hover:shadow-xl transition-all border-2 border-primary/20">
+          <Card className="hover-lift hover:shadow-accent transition-all border-primary/20 bg-gradient-card group animate-slide-up" style={{ animationDelay: '0.4s' }}>
             <CardHeader>
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-primary/10 rounded-lg">
-                  <Users className="h-6 w-6 text-primary" />
+                <div className="p-3 bg-gradient-primary rounded-xl shadow-md group-hover:shadow-glow transition-shadow">
+                  <Users className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <CardTitle>Manage Data</CardTitle>
+                  <CardTitle className="text-xl">Manage Data</CardTitle>
                   <CardDescription>Add and edit teachers, subjects, rooms, and batches</CardDescription>
                 </div>
               </div>
@@ -95,7 +105,7 @@ const Dashboard = () => {
             <CardContent>
               <Button 
                 onClick={() => navigate("/manage/teachers")}
-                className="w-full"
+                className="w-full bg-gradient-primary hover:shadow-glow transition-all"
                 size="lg"
               >
                 Go to Data Management
@@ -103,14 +113,14 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-xl transition-all border-2 border-accent/20">
+          <Card className="hover-lift hover:shadow-accent transition-all border-accent/20 bg-gradient-card group animate-slide-up" style={{ animationDelay: '0.5s' }}>
             <CardHeader>
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-accent/10 rounded-lg">
-                  <Calendar className="h-6 w-6 text-accent" />
+                <div className="p-3 bg-gradient-to-br from-accent to-accent-glow rounded-xl shadow-md group-hover:shadow-accent transition-shadow">
+                  <Calendar className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <CardTitle>Generate Timetable</CardTitle>
+                  <CardTitle className="text-xl">Generate Timetable</CardTitle>
                   <CardDescription>Create an optimized weekly schedule automatically</CardDescription>
                 </div>
               </div>
@@ -118,7 +128,7 @@ const Dashboard = () => {
             <CardContent>
               <Button 
                 onClick={() => navigate("/generate")}
-                className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+                className="w-full bg-gradient-to-r from-accent to-accent-glow text-white hover:shadow-accent transition-all"
                 size="lg"
               >
                 Generate Schedule
