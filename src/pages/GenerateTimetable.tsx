@@ -75,6 +75,15 @@ const GenerateTimetable = () => {
     },
   });
 
+  const { data: batchAssignments } = useQuery({
+    queryKey: ["teacher-batch-assignments"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("teacher_batch_assignments").select("*");
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const generateMutation = useMutation({
     mutationFn: async () => {
       // Validate data
@@ -84,6 +93,10 @@ const GenerateTimetable = () => {
 
       if (!assignments?.length) {
         throw new Error("No teacher-subject assignments found. Please assign subjects to teachers first.");
+      }
+
+      if (!batchAssignments?.length) {
+        throw new Error("No teacher-batch assignments found. Please assign teachers to batches first.");
       }
 
       // Clear existing timetable
@@ -97,6 +110,7 @@ const GenerateTimetable = () => {
         batches,
         timeslots,
         assignments,
+        batchAssignments,
       });
 
       // Insert new timetable
@@ -138,6 +152,8 @@ const GenerateTimetable = () => {
     await queryClient.invalidateQueries({ queryKey: ["batches"] });
     setProgress(70);
     await queryClient.invalidateQueries({ queryKey: ["teacher-subject-assignments"] });
+    setProgress(75);
+    await queryClient.invalidateQueries({ queryKey: ["teacher-batch-assignments"] });
     setProgress(80);
     
     // Wait a bit for queries to refetch
@@ -178,6 +194,7 @@ const GenerateTimetable = () => {
                   <li>✓ No batch has overlapping classes</li>
                   <li>✓ No room is double-booked</li>
                   <li>✓ Lab subjects are assigned to lab rooms</li>
+                  <li>✓ Teachers only teach batches they are assigned to</li>
                   <li>✓ All weekly hours for each subject are allocated</li>
                 </ul>
               </div>

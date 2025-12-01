@@ -38,6 +38,11 @@ interface Assignment {
   subject_id: string;
 }
 
+interface BatchAssignment {
+  teacher_id: string;
+  batch_id: string;
+}
+
 interface TimetableEntry {
   batch_id: string;
   subject_id: string;
@@ -53,6 +58,7 @@ interface GenerateParams {
   batches: Batch[];
   timeslots: Timeslot[];
   assignments: Assignment[];
+  batchAssignments: BatchAssignment[];
 }
 
 export function generateOptimizedTimetable({
@@ -62,6 +68,7 @@ export function generateOptimizedTimetable({
   batches,
   timeslots,
   assignments,
+  batchAssignments,
 }: GenerateParams): TimetableEntry[] {
   const timetableEntries: TimetableEntry[] = [];
   
@@ -72,7 +79,13 @@ export function generateOptimizedTimetable({
     batchCount: batches.length,
     timeslotCount: timeslots.length,
     assignmentCount: assignments.length,
+    batchAssignmentCount: batchAssignments.length,
   });
+  
+  // Helper function to check if teacher is assigned to batch
+  const isTeacherAssignedToBatch = (teacherId: string, batchId: string): boolean => {
+    return batchAssignments.some(ba => ba.teacher_id === teacherId && ba.batch_id === batchId);
+  };
   
   // Sort timeslots by day and time for consistent ordering
   const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -209,13 +222,14 @@ export function generateOptimizedTimetable({
   
   for (const batch of batches) {
     for (const subject of labSubjects) {
-      // Find teacher for this subject
+      // Find teacher for this subject who is also assigned to this batch
       const teacherIds = assignments
         .filter(a => a.subject_id === subject.id)
-        .map(a => a.teacher_id);
+        .map(a => a.teacher_id)
+        .filter(tid => isTeacherAssignedToBatch(tid, batch.id));
       
       if (teacherIds.length === 0) {
-        console.warn(`No teacher assigned for lab subject: ${subject.name}`);
+        console.warn(`No teacher assigned for lab subject ${subject.name} in batch ${batch.name} (either no teacher for subject or teacher not assigned to this batch)`);
         continue;
       }
 
@@ -314,13 +328,14 @@ export function generateOptimizedTimetable({
   
   for (const batch of batches) {
     for (const subject of theorySubjects) {
-      // Find teacher for this subject
+      // Find teacher for this subject who is also assigned to this batch
       const teacherIds = assignments
         .filter(a => a.subject_id === subject.id)
-        .map(a => a.teacher_id);
+        .map(a => a.teacher_id)
+        .filter(tid => isTeacherAssignedToBatch(tid, batch.id));
       
       if (teacherIds.length === 0) {
-        console.warn(`No teacher assigned for theory subject: ${subject.name}`);
+        console.warn(`No teacher assigned for theory subject ${subject.name} in batch ${batch.name} (either no teacher for subject or teacher not assigned to this batch)`);
         continue;
       }
 
