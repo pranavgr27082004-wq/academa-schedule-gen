@@ -12,7 +12,7 @@ import autoTable from "jspdf-autotable";
 
 const ViewTimetable = () => {
   const [filterType, setFilterType] = useState<"batch" | "teacher" | "room">("batch");
-  const [selectedFilter, setSelectedFilter] = useState<string>("all");
+  const [selectedFilter, setSelectedFilter] = useState<string>("");
   const queryClient = useQueryClient();
 
   // Fetch timetable with all related data
@@ -77,7 +77,7 @@ const ViewTimetable = () => {
 
   // Filter timetable data
   const filteredData = timetableData?.filter(entry => {
-    if (selectedFilter === "all") return true;
+    if (!selectedFilter) return true;
     
     switch (filterType) {
       case "batch":
@@ -576,7 +576,7 @@ const ViewTimetable = () => {
     
     // Filter information
     let filterText = "Complete Schedule";
-    if (selectedFilter !== "all") {
+    if (selectedFilter) {
       const filterName = filterType === "batch" 
         ? batches?.find(b => b.id === selectedFilter)?.name
         : filterType === "teacher"
@@ -668,7 +668,7 @@ const ViewTimetable = () => {
     }
 
     // Save the PDF
-    const filename = selectedFilter === "all" 
+    const filename = !selectedFilter 
       ? "Complete_Timetable.pdf"
       : `${filterType}_${selectedFilter}_Timetable.pdf`;
     
@@ -769,7 +769,7 @@ const ViewTimetable = () => {
             <label className="text-sm font-medium mb-2 block">Filter Type</label>
             <Select value={filterType} onValueChange={(value: any) => {
               setFilterType(value);
-              setSelectedFilter("all");
+              setSelectedFilter("");
             }}>
               <SelectTrigger>
                 <SelectValue />
@@ -786,10 +786,9 @@ const ViewTimetable = () => {
             <label className="text-sm font-medium mb-2 block">Select {filterType}</label>
             <Select value={selectedFilter} onValueChange={setSelectedFilter}>
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder={`Select ${filterType}...`} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
                 {filterType === "batch" && batches?.map(batch => (
                   <SelectItem key={batch.id} value={batch.id}>{batch.name}</SelectItem>
                 ))}
@@ -857,7 +856,7 @@ const ViewTimetable = () => {
           <CardHeader>
             <CardTitle>Weekly Schedule</CardTitle>
             <CardDescription>
-              {selectedFilter === "all" 
+              {!selectedFilter 
                 ? "Showing complete timetable" 
                 : `Filtered by ${filterType}`}
             </CardDescription>
