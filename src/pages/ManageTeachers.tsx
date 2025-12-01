@@ -28,9 +28,16 @@ interface Subject {
   hours_per_week: number;
 }
 
+interface Batch {
+  id: string;
+  name: string;
+  semester: number;
+}
+
 const ManageTeachers = () => {
   const [open, setOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [batchAssignOpen, setBatchAssignOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [teacherToDelete, setTeacherToDelete] = useState<Teacher | null>(null);
   const [editingTeacher, setEditingTeacher] = useState<Teacher | null>(null);
@@ -38,6 +45,7 @@ const ManageTeachers = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  const [selectedBatches, setSelectedBatches] = useState<string[]>([]);
 
   const queryClient = useQueryClient();
 
@@ -59,12 +67,32 @@ const ManageTeachers = () => {
     },
   });
 
+  const { data: batches, isLoading: loadingBatches } = useQuery({
+    queryKey: ["batches"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("batches").select("*").order("name");
+      if (error) throw error;
+      return data as Batch[];
+    },
+  });
+
   const { data: allAssignments } = useQuery({
     queryKey: ["all-teacher-assignments"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("teacher_subject_assignments")
         .select("teacher_id, subject_id");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: allBatchAssignments } = useQuery({
+    queryKey: ["all-teacher-batch-assignments"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("teacher_batch_assignments")
+        .select("teacher_id, batch_id");
       if (error) throw error;
       return data;
     },
@@ -79,6 +107,16 @@ const ManageTeachers = () => {
       setSelectedSubjects(currentAssignments);
     }
   }, [assignOpen, selectedTeacher, allAssignments]);
+
+  // Initialize selectedBatches when dialog opens
+  useEffect(() => {
+    if (batchAssignOpen && selectedTeacher) {
+      const currentBatchAssignments = allBatchAssignments
+        ?.filter(a => a.teacher_id === selectedTeacher.id)
+        .map(a => a.batch_id) || [];
+      setSelectedBatches(currentBatchAssignments);
+    }
+  }, [batchAssignOpen, selectedTeacher, allBatchAssignments]);
 
   const createMutation = useMutation({
     mutationFn: async (newTeacher: { name: string; email: string }) => {
@@ -144,6 +182,30 @@ const ManageTeachers = () => {
     onError: () => toast.error("Failed to assign subjects"),
   });
 
+  const assignBatchesMutation = useMutation({
+    mutationFn: async ({ teacherId, batchIds }: { teacherId: string; batchIds: string[] }) => {
+      // Delete existing batch assignments
+      await supabase.from("teacher_batch_assignments").delete().eq("teacher_id", teacherId);
+      
+      // Insert new batch assignments
+      if (batchIds.length > 0) {
+        const assignments = batchIds.map(batchId => ({
+          teacher_id: teacherId,
+          batch_id: batchId,
+        }));
+        const { error } = await supabase.from("teacher_batch_assignments").insert(assignments);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["all-teacher-batch-assignments"] });
+      toast.success("Batches assigned successfully");
+      setBatchAssignOpen(false);
+      setSelectedBatches([]);
+    },
+    onError: () => toast.error("Failed to assign batches"),
+  });
+
   const resetForm = () => {
     setName("");
     setEmail("");
@@ -200,10 +262,22 @@ const ManageTeachers = () => {
     }
   };
 
+  const handleAssignBatches = (teacher: Teacher) => {
+    setSelectedTeacher(teacher);
+    setBatchAssignOpen(true);
+  };
+
   const getTeacherSubjects = (teacherId: string) => {
     return allAssignments
       ?.filter(a => a.teacher_id === teacherId)
       .map(a => subjects?.find(s => s.id === a.subject_id))
+      .filter(Boolean) || [];
+  };
+
+  const getTeacherBatches = (teacherId: string) => {
+    return allBatchAssignments
+      ?.filter(a => a.teacher_id === teacherId)
+      .map(a => batches?.find(b => b.id === a.batch_id))
       .filter(Boolean) || [];
   };
 
@@ -281,17 +355,32 @@ const ManageTeachers = () => {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Assigned Batches</TableHead>
                     <TableHead>Assigned Subjects</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {teachers?.map((teacher) => {
+                {teachers?.map((teacher) => {
                     const teacherSubjects = getTeacherSubjects(teacher.id);
+                    const teacherBatches = getTeacherBatches(teacher.id);
                     return (
                       <TableRow key={teacher.id}>
                         <TableCell className="font-medium">{teacher.name}</TableCell>
                         <TableCell>{teacher.email}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {teacherBatches.length === 0 ? (
+                              <span className="text-sm text-muted-foreground">No batches assigned</span>
+                            ) : (
+                              teacherBatches.map((batch: any) => (
+                                <Badge key={batch.id} variant="default">
+                                  {batch.name}
+                                </Badge>
+                              ))
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
                             {teacherSubjects.length === 0 ? (
@@ -310,10 +399,18 @@ const ManageTeachers = () => {
                             <Button
                               variant="outline"
                               size="sm"
+                              onClick={() => handleAssignBatches(teacher)}
+                            >
+                              <UserPlus className="h-4 w-4 mr-1" />
+                              Batches
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
                               onClick={() => handleAssignSubjects(teacher)}
                             >
                               <BookOpen className="h-4 w-4 mr-1" />
-                              Assign
+                              Subjects
                             </Button>
                             <Button
                               variant="outline"
@@ -406,13 +503,77 @@ const ManageTeachers = () => {
           </DialogContent>
         </Dialog>
 
+        <Dialog open={batchAssignOpen} onOpenChange={(open) => {
+          setBatchAssignOpen(open);
+          if (!open) setSelectedBatches([]);
+        }}>
+          <DialogContent className="max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Assign Batches to {selectedTeacher?.name}</DialogTitle>
+              <DialogDescription>
+                Select the batches/sections this teacher handles. Currently selected: {selectedBatches.length}
+              </DialogDescription>
+            </DialogHeader>
+            {loadingBatches ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="grid gap-3 py-4">
+                {batches?.map((batch) => (
+                  <div key={batch.id} className="flex items-start space-x-3 rounded-lg border p-3 hover:bg-accent transition-colors">
+                    <Checkbox
+                      id={batch.id}
+                      checked={selectedBatches.includes(batch.id)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedBatches([...selectedBatches, batch.id]);
+                        } else {
+                          setSelectedBatches(selectedBatches.filter(id => id !== batch.id));
+                        }
+                      }}
+                    />
+                    <div className="flex-1">
+                      <label htmlFor={batch.id} className="text-sm font-medium cursor-pointer">
+                        {batch.name}
+                      </label>
+                      <div className="flex gap-2 mt-1">
+                        <Badge variant="outline" className="text-xs">Semester {batch.semester}</Badge>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setBatchAssignOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (selectedTeacher) {
+                    assignBatchesMutation.mutate({
+                      teacherId: selectedTeacher.id,
+                      batchIds: selectedBatches,
+                    });
+                  }
+                }}
+                disabled={assignBatchesMutation.isPending}
+              >
+                {assignBatchesMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save Batch Assignments
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Teacher</AlertDialogTitle>
               <AlertDialogDescription>
                 Are you sure you want to delete <strong>{teacherToDelete?.name}</strong>? 
-                This will also remove all their subject assignments. This action cannot be undone.
+                This will also remove all their subject and batch assignments. This action cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
