@@ -18,6 +18,7 @@ import GenerateTimetable from "./pages/GenerateTimetable";
 import ViewTimetable from "./pages/ViewTimetable";
 import Settings from "./pages/Settings";
 import Auth from "./pages/Auth";
+import OAuthConsent from "./pages/OAuthConsent";
 import NotFound from "./pages/NotFound";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
@@ -81,6 +82,8 @@ const App = () => {
                 <main className="flex-1">
                   <Routes>
                     <Route path="/auth" element={<Auth />} />
+                    <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
+
                     <Route path="/" element={
                       <ProtectedRoute session={session}>
                         <Dashboard />
