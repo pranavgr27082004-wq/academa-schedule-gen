@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "sdk_version": "0.26.1",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://sicdmiiylyfcaidowvyt.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "academa-schedule-gen",
+      "version": "0.1.0",
+      "title": "academa-schedule-gen"
+    },
+    "tools": [
+      {
+        "name": "list_records",
+        "title": "List scheduling records",
+        "description": "List rows from a scheduling table: teachers, subjects, rooms, batches, or timeslots.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string",
+              "enum": [
+                "teachers",
+                "subjects",
+                "rooms",
+                "batches",
+                "timeslots"
+              ],
+              "description": "Which scheduling table to read."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 100,
+              "description": "Max rows to return."
+            }
+          },
+          "required": [
+            "table"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_timetable",
+        "title": "Get timetable",
+        "description": "Read the generated weekly timetable with subject, teacher, room, batch and time slot details. Optionally filter by batch name, teacher name, or day.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "batch": {
+              "type": "string",
+              "description": "Filter to a batch name (case-insensitive)."
+            },
+            "teacher": {
+              "type": "string",
+              "description": "Filter to a teacher name (case-insensitive)."
+            },
+            "day": {
+              "type": "string",
+              "description": "Filter to a day, e.g. Monday."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "add_teacher",
+        "title": "Add teacher",
+        "description": "Create a new teacher record with a name and email.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Teacher full name."
+            },
+            "email": {
+              "type": "string",
+              "minLength": 3,
+              "description": "Teacher email address."
+            }
+          },
+          "required": [
+            "name",
+            "email"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
