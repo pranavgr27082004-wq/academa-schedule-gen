@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { Loader2, Calendar } from "lucide-react";
 
 const Auth = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
@@ -21,11 +22,15 @@ const Auth = () => {
   const [newPassword, setNewPassword] = useState("");
   const [isRecoveryMode, setIsRecoveryMode] = useState(false);
 
+  // Only allow same-origin relative redirect targets.
+  const rawNext = searchParams.get("next") ?? "";
+  const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/";
+
   useEffect(() => {
     // Check if user is already logged in
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        navigate("/");
+        navigate(nextPath, { replace: true });
       }
     });
 
@@ -34,12 +39,13 @@ const Auth = () => {
       if (event === 'PASSWORD_RECOVERY') {
         setIsRecoveryMode(true);
       } else if (session) {
-        navigate("/");
+        navigate(nextPath, { replace: true });
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, nextPath]);
+
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
