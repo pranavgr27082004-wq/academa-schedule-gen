@@ -18,6 +18,7 @@ import GenerateTimetable from "./pages/GenerateTimetable";
 import ViewTimetable from "./pages/ViewTimetable";
 import Settings from "./pages/Settings";
 import Auth from "./pages/Auth";
+import OAuthConsent from "./pages/OAuthConsent";
 import NotFound from "./pages/NotFound";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
