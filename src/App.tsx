@@ -82,6 +82,8 @@ const App = () => {
                 <main className="flex-1">
                   <Routes>
                     <Route path="/auth" element={<Auth />} />
+                    <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
+
                     <Route path="/" element={
                       <ProtectedRoute session={session}>
                         <Dashboard />
